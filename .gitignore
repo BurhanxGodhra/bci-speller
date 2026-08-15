@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Data (large, fetched via MOABB/dataset scripts — not committed)
+data/mock_recordings/*
+!data/mock_recordings/.gitkeep
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Local model weights (LLM, CNN checkpoints — Phase 4/6)
+*.pt
+*.bin
+*.gguf
+models/

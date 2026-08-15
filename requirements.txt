@@ -1,0 +1,32 @@
+# --- Core signal processing / ML for EEG ---
+mne==1.7.1
+moabb==1.1.1
+pyriemann==0.6
+scikit-learn==1.5.1
+numpy==1.26.4
+scipy==1.13.1
+
+# --- Hardware / streaming ---
+pylsl==1.16.2
+
+# --- Rendering (SSVEP flicker + P300 flash matrix) ---
+pygame==2.6.0
+
+# --- OS-level keypress injection (Phase 7) ---
+pyautogui==0.9.54
+pyobjc-core==10.3.1        # required by pyautogui on macOS
+pyobjc-framework-Quartz==10.3.1
+
+# --- Config / HAL ---
+pyyaml==6.0.2
+
+# --- Local LLM predictive text (Phase 6) ---
+transformers==4.44.2
+torch==2.4.1                # Apple Silicon: installs with MPS backend support automatically
+accelerate==0.33.0
+sentencepiece==0.2.0
+
+# --- Utilities ---
+pandas==2.2.2
+matplotlib==3.9.1
+tqdm==4.66.5
