@@ -1,42 +1,65 @@
 """
 Phase 1 diagnostic script.
 
-1. Measures ACTUAL delivered frame timing (not the OS-reported nominal refresh rate)
-   over a fixed window, reporting mean FPS, jitter (std dev of frame time), and the
-   set of SSVEP-safe integer-divisor frequencies for whatever refresh rate is measured.
-2. Checks whether PyAutoGUI can query the screen / control the mouse, which on macOS
-   requires Accessibility + Screen Recording permissions to be granted to the terminal
-   or IDE running this script.
+1. Queries the AUTHORITATIVE display refresh rate directly from macOS (via NSScreen's
+   maximumFramesPerSecond), which correctly reports fixed-rate panels (e.g. MacBook Air's
+   locked 60Hz) as well as ProMotion's variable-rate ceiling (MacBook Pro 14"/16", up to
+   120Hz) — unlike trying to time a small windowed SDL2 surface, which SDL2 on macOS does
+   NOT reliably vsync-lock, especially for unfocused/non-fullscreen windows.
+2. Runs a best-effort pygame frame-timing loop as a secondary sanity check, but labels it
+   clearly as non-authoritative — real stimulus-loop jitter will be verified properly in
+   Phase 4, once we're running the actual fullscreen SSVEP flicker engine.
+3. Checks whether PyAutoGUI can query the screen / control the mouse, which on macOS
+   requires Accessibility permission to be granted to the terminal or IDE running this
+   script.
 
 Run:
     python scripts/verify_display_and_permissions.py
 """
 
+import platform
+import sys
 import time
 import statistics
-import sys
 
 import pygame
 
 
-def verify_refresh_rate(measure_seconds: float = 5.0, target_fallback_hz: int = 60):
-    pygame.init()
-    # Windowed, not fullscreen, so this is safe to run without disrupting your desktop.
-    screen = pygame.display.set_mode((600, 300))
-    pygame.display.set_caption("SSVEP Frame Timing Verification")
-    clock = pygame.time.Clock()
+def get_authoritative_refresh_rate():
+    """Query macOS directly for the real panel refresh rate via NSScreen.
+
+    Returns (hz, is_variable) or (None, None) if not on macOS / query fails.
+    """
+    if platform.system() != "Darwin":
+        print("Not running on macOS — skipping NSScreen query.")
+        return None, None
 
     try:
-        detected = pygame.display.get_current_refresh_rate()
-    except Exception:
-        detected = None
+        from AppKit import NSScreen
+    except ImportError:
+        print("❌ pyobjc-framework-Cocoa not installed. Run: pip install -r requirements.txt")
+        return None, None
 
-    nominal_hz = detected if detected and detected > 0 else target_fallback_hz
-    print(f"OS-reported nominal refresh rate: {nominal_hz} Hz")
-    print(f"Measuring actual delivered frame timing for {measure_seconds:.0f}s...")
+    try:
+        screen = NSScreen.mainScreen()
+        max_fps = screen.maximumFramesPerSecond()  # macOS 12+; ceiling for variable-refresh panels
+        # Heuristic: ProMotion panels report a max well above 60 (90 or 120); fixed panels
+        # (e.g. MacBook Air, external displays) report their actual fixed rate.
+        is_variable = max_fps > 60
+        return float(max_fps), is_variable
+    except Exception as e:
+        print(f"❌ Could not query NSScreen: {e}")
+        return None, None
+
+
+def rough_pygame_estimate(measure_seconds: float = 3.0):
+    """Best-effort, NON-authoritative frame-timing loop. See module docstring."""
+    pygame.init()
+    screen = pygame.display.set_mode((500, 200))
+    pygame.display.set_caption("Rough timing check (non-authoritative)")
+    font = pygame.font.SysFont(None, 24)
 
     frame_times = []
-    font = pygame.font.SysFont(None, 28)
     start = time.perf_counter()
     last = start
 
@@ -45,43 +68,25 @@ def verify_refresh_rate(measure_seconds: float = 5.0, target_fallback_hz: int = 
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit(0)
-
+        screen.fill((15, 15, 20))
+        screen.blit(font.render("rough estimate only...", True, (200, 200, 200)), (20, 90))
+        pygame.display.flip()
         now = time.perf_counter()
         frame_times.append(now - last)
         last = now
 
-        screen.fill((15, 15, 20))
-        msg = font.render("Measuring frame timing... do not resize window", True, (230, 230, 230))
-        screen.blit(msg, (20, 130))
-        pygame.display.flip()
-
-        clock.tick(nominal_hz * 2)  # allow headroom; vsync (below) is what actually paces us
-
     pygame.quit()
-
-    # Drop the first few frames (startup transient)
-    frame_times = frame_times[5:]
+    frame_times = frame_times[3:] or frame_times
     mean_dt = statistics.mean(frame_times)
-    measured_hz = 1.0 / mean_dt
-    jitter_ms = statistics.pstdev(frame_times) * 1000
+    return 1.0 / mean_dt if mean_dt > 0 else 0.0
 
-    print("\n--- Results ---")
-    print(f"Measured refresh rate:  {measured_hz:.2f} Hz")
-    print(f"Frame time jitter (std): {jitter_ms:.3f} ms")
 
-    if jitter_ms > 1.5:
-        print("⚠️  Jitter is high (>1.5ms). SSVEP frequency precision may be degraded.")
-        print("    Close other GPU-heavy apps and re-run before proceeding to Phase 4.")
-    else:
-        print("✅  Jitter is low enough for reliable SSVEP stimulus timing.")
-
-    print("\nSSVEP-safe frequencies (exact integer divisors of measured refresh rate):")
-    safe_freqs = [round(measured_hz / d, 3) for d in range(2, 16) if measured_hz / d >= 4]
-    print(", ".join(f"{f} Hz (÷{d})" for d, f in zip(range(2, 16), safe_freqs)))
-    print("\nUse ONLY frequencies from this list (or close to them) in Phase 4 stimulus design —")
-    print("non-divisor frequencies will alias against your true frame rate and corrupt CCA detection.")
-
-    return measured_hz, jitter_ms
+def compute_safe_ssvep_frequencies(hz: float, max_divisor: int = 15):
+    return [
+        (d, round(hz / d, 3))
+        for d in range(2, max_divisor + 1)
+        if hz / d >= 4
+    ]
 
 
 def verify_pyautogui_permissions():
@@ -96,7 +101,6 @@ def verify_pyautogui_permissions():
         size = pyautogui.size()
         print(f"Screen size detected: {size}")
         pos_before = pyautogui.position()
-        # Non-destructive: move 1px and back, proves OS-level control is authorized
         pyautogui.moveTo(pos_before.x + 1, pos_before.y, duration=0)
         pyautogui.moveTo(pos_before.x, pos_before.y, duration=0)
         print("✅ PyAutoGUI can control the mouse — Accessibility permission is granted.")
@@ -105,14 +109,41 @@ def verify_pyautogui_permissions():
         print(f"❌ PyAutoGUI could not control the input devices: {e}")
         print("   On macOS: System Settings → Privacy & Security → Accessibility →")
         print("   enable your terminal app (Terminal.app, iTerm2, or your IDE).")
-        print("   You will need this working before Phase 7 (OS keypress injection).")
         return False
 
 
 if __name__ == "__main__":
-    measured_hz, jitter_ms = verify_refresh_rate()
+    print("--- Authoritative Display Refresh Rate (macOS NSScreen) ---")
+    auth_hz, is_variable = get_authoritative_refresh_rate()
+
+    if auth_hz:
+        print(f"Panel max refresh rate: {auth_hz:.1f} Hz")
+        print(f"Variable-refresh (ProMotion-style) panel: {'YES' if is_variable else 'NO (fixed rate)'}")
+    else:
+        print("Falling back to assuming 60 Hz nominal (query failed or non-macOS).")
+        auth_hz = 60.0
+        is_variable = False
+
+    print("\n--- Rough pygame timing estimate (NON-authoritative, sanity check only) ---")
+    rough_hz = rough_pygame_estimate()
+    print(f"Rough windowed-frame estimate: {rough_hz:.1f} Hz")
+    print("(This number is expected to be noisy/wrong on macOS — ignore large discrepancies")
+    print(" vs. the authoritative value above. True jitter gets verified in Phase 4's")
+    print(" fullscreen stimulus loop, where SDL2 vsync behaves correctly.)")
+
+    print(f"\nSSVEP-safe frequencies (exact integer divisors of {auth_hz:.1f} Hz):")
+    safe_freqs = compute_safe_ssvep_frequencies(auth_hz)
+    print(", ".join(f"{f} Hz (÷{d})" for d, f in safe_freqs))
+
+    if is_variable:
+        print("\n⚠️  Your panel supports variable refresh (ProMotion). For SSVEP we need a")
+        print("    FIXED rate during the whole session — in Phase 4 we'll force the display")
+        print("    to a fixed refresh mode (e.g. via System Settings > Displays, or")
+        print("    programmatically) before deriving stimulus frequencies from it.")
+
     perms_ok = verify_pyautogui_permissions()
 
     print("\n=== SUMMARY ===")
-    print(f"Refresh rate measured: {measured_hz:.2f} Hz (jitter {jitter_ms:.3f} ms)")
+    print(f"Authoritative panel refresh: {auth_hz:.1f} Hz (variable: {is_variable})")
+    print(f"Rough pygame estimate (ignore if far off): {rough_hz:.1f} Hz")
     print(f"PyAutoGUI permissions: {'OK' if perms_ok else 'NEEDS ATTENTION'}")

@@ -1,10 +1,10 @@
 # --- Core signal processing / ML for EEG ---
-mne==1.7.1
-moabb==1.1.1
-pyriemann==0.6
-scikit-learn==1.5.1
-numpy==1.26.4
-scipy==1.13.1
+mne
+moabb
+pyriemann
+scikit-learn
+numpy>=1.24.0,<2.0.0
+scipy
 
 # --- Hardware / streaming ---
 pylsl==1.16.2
@@ -16,6 +16,7 @@ pygame==2.6.0
 pyautogui==0.9.54
 pyobjc-core==10.3.1        # required by pyautogui on macOS
 pyobjc-framework-Quartz==10.3.1
+pyobjc-framework-Cocoa==10.3.1   # NSScreen display refresh-rate query (Phase 1 diagnostic)
 
 # --- Config / HAL ---
 pyyaml==6.0.2
@@ -27,6 +28,6 @@ accelerate==0.33.0
 sentencepiece==0.2.0
 
 # --- Utilities ---
-pandas==2.2.2
-matplotlib==3.9.1
-tqdm==4.66.5
+pandas
+matplotlib
+tqdm
