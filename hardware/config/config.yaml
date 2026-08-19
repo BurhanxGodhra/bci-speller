@@ -1,0 +1,49 @@
+# Hardware Abstraction Layer config.
+# Select the active device via `active_device`. Everything downstream (paradigms, UI)
+# only ever sees the channels listed in `required_channels`, harmonized to `target_sample_rate`.
+
+active_device: mock_playback   # openbci_cyton | muse_s | ganglion | mock_playback
+
+target_sample_rate: 250        # Hz — all incoming streams are resampled to this
+lsl_discovery_timeout_sec: 5.0
+lsl_stream_type: "EEG"         # property queried via resolve_byprop('type', 'EEG')
+
+# Channels our paradigms actually need. P300 wants centro-parietal (Cz, Pz);
+# SSVEP wants occipital (O1, Oz, O2). We request the union.
+required_channels: ["O1", "Oz", "O2", "Cz", "Pz"]
+
+devices:
+  openbci_cyton:
+    lsl_name_hint: "OpenBCI"        # substring match fallback if type-based resolve is ambiguous
+    native_sample_rate: 250
+    # User-configurable electrode order on the Cyton — this is the standard 8-ch 10-20 layout
+    # for a speller montage. Adjust to match your physical electrode placement.
+    channel_order: ["Fz", "C3", "Cz", "C4", "Pz", "O1", "Oz", "O2"]
+    channel_fallback: {}          # exact matches available, no fallback needed
+
+  muse_s:
+    lsl_name_hint: "Muse"
+    native_sample_rate: 256
+    channel_order: ["TP9", "AF7", "AF8", "TP10"]
+    # Muse has NO occipital or true centro-parietal electrodes. We fall back to the nearest
+    # physically/functionally plausible channel and flag it — accuracy will be degraded for
+    # SSVEP especially, since O1/Oz/O2 proxies via TP9/TP10 lose most of the visual-cortex SNR.
+    channel_fallback:
+      O1: "TP9"
+      Oz: "TP9"     # nearest available; no true midline-occipital analog exists on Muse
+      O2: "TP10"
+      Cz: "AF7"     # NOT anatomically accurate — placeholder until better electrode available
+      Pz: "AF8"     # NOT anatomically accurate — placeholder until better electrode available
+
+  ganglion:
+    lsl_name_hint: "Ganglion"
+    native_sample_rate: 200
+    channel_order: ["Cz", "Pz", "O1", "O2"]
+    channel_fallback:
+      Oz: "O1"      # nearest available; Ganglion's 4ch montage has no true midline Oz
+
+  mock_playback:
+    lsl_name_hint: "MockPlayback"
+    native_sample_rate: 250
+    channel_order: ["O1", "Oz", "O2", "Cz", "Pz"]
+    channel_fallback: {}
