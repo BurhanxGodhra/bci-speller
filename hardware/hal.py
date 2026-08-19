@@ -51,8 +51,6 @@ class HAL:
             timeout_sec=timeout,
         )
 
-        # Prefer channel labels reported by the live stream; fall back to config.yaml's
-        # declared channel_order if the source didn't populate LSL metadata.
         live_labels = get_channel_labels(discovered)
         device_channel_order = live_labels if live_labels else device_cfg["channel_order"]
 
@@ -74,10 +72,6 @@ class HAL:
         )
 
     def pull_chunk(self, timeout: float = 1.0, max_samples: int = 1024) -> np.ndarray | None:
-        """
-        Pull whatever new samples are available, map to required channels, and harmonize
-        sample rate. Returns None if no new data arrived within timeout.
-        """
         samples, timestamps = self.inlet.pull_chunk(timeout=timeout, max_samples=max_samples)
         if not samples:
             return None

@@ -1,14 +1,3 @@
-"""
-Phase 3 checkpoint: loads real P300 data via MOABB, trains xDAWN+LDA, reports
-cross-validated accuracy/AUC.
-
-First run downloads the dataset (~internet required, cached to ~/mne_data afterward).
-
-Run:
-    python scripts/train_p300.py
-    python scripts/train_p300.py --subjects 1 2 3 --n-filters 6
-"""
-
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -45,8 +34,6 @@ if __name__ == "__main__":
     print(f"({results['n_folds']}-fold cross-validation)")
 
     if results["auc_mean"] < 0.6:
-        print("\n⚠️  AUC is close to chance (0.5) — worth checking data loading / class "
-              "balance before proceeding, though single-subject P300 AUC in the 0.6-0.75 "
-              "range is not unusual before any hyperparameter tuning.")
+        print("\n  AUC is close to chance (0.5)")
     else:
-        print("\n✅ Classifier is learning a real signal above chance — Phase 3 checkpoint met.")
+        print("\n Classifier working")

@@ -1,22 +1,3 @@
-"""
-Phase 1 diagnostic script.
-
-1. Queries the AUTHORITATIVE display refresh rate directly from macOS (via NSScreen's
-   maximumFramesPerSecond), which correctly reports fixed-rate panels (e.g. MacBook Air's
-   locked 60Hz) as well as ProMotion's variable-rate ceiling (MacBook Pro 14"/16", up to
-   120Hz) — unlike trying to time a small windowed SDL2 surface, which SDL2 on macOS does
-   NOT reliably vsync-lock, especially for unfocused/non-fullscreen windows.
-2. Runs a best-effort pygame frame-timing loop as a secondary sanity check, but labels it
-   clearly as non-authoritative — real stimulus-loop jitter will be verified properly in
-   Phase 4, once we're running the actual fullscreen SSVEP flicker engine.
-3. Checks whether PyAutoGUI can query the screen / control the mouse, which on macOS
-   requires Accessibility permission to be granted to the terminal or IDE running this
-   script.
-
-Run:
-    python scripts/verify_display_and_permissions.py
-"""
-
 import platform
 import sys
 import time
@@ -48,7 +29,7 @@ def get_authoritative_refresh_rate():
         is_variable = max_fps > 60
         return float(max_fps), is_variable
     except Exception as e:
-        print(f"❌ Could not query NSScreen: {e}")
+        print(f"Could not query NSScreen: {e}")
         return None, None
 
 
@@ -94,7 +75,7 @@ def verify_pyautogui_permissions():
     try:
         import pyautogui
     except ImportError:
-        print("❌ pyautogui is not installed. Run: pip install -r requirements.txt")
+        print("pyautogui is not installed")
         return False
 
     try:
@@ -103,12 +84,10 @@ def verify_pyautogui_permissions():
         pos_before = pyautogui.position()
         pyautogui.moveTo(pos_before.x + 1, pos_before.y, duration=0)
         pyautogui.moveTo(pos_before.x, pos_before.y, duration=0)
-        print("✅ PyAutoGUI can control the mouse — Accessibility permission is granted.")
+        print("Accessibility permission is granted.")
         return True
     except Exception as e:
-        print(f"❌ PyAutoGUI could not control the input devices: {e}")
-        print("   On macOS: System Settings → Privacy & Security → Accessibility →")
-        print("   enable your terminal app (Terminal.app, iTerm2, or your IDE).")
+        print(f"could not control the input devices: {e}")
         return False
 
 
@@ -120,26 +99,20 @@ if __name__ == "__main__":
         print(f"Panel max refresh rate: {auth_hz:.1f} Hz")
         print(f"Variable-refresh (ProMotion-style) panel: {'YES' if is_variable else 'NO (fixed rate)'}")
     else:
-        print("Falling back to assuming 60 Hz nominal (query failed or non-macOS).")
+        print("(query failed or non-macOS)")
         auth_hz = 60.0
         is_variable = False
 
     print("\n--- Rough pygame timing estimate (NON-authoritative, sanity check only) ---")
     rough_hz = rough_pygame_estimate()
     print(f"Rough windowed-frame estimate: {rough_hz:.1f} Hz")
-    print("(This number is expected to be noisy/wrong on macOS — ignore large discrepancies")
-    print(" vs. the authoritative value above. True jitter gets verified in Phase 4's")
-    print(" fullscreen stimulus loop, where SDL2 vsync behaves correctly.)")
 
     print(f"\nSSVEP-safe frequencies (exact integer divisors of {auth_hz:.1f} Hz):")
     safe_freqs = compute_safe_ssvep_frequencies(auth_hz)
     print(", ".join(f"{f} Hz (÷{d})" for d, f in safe_freqs))
 
     if is_variable:
-        print("\n⚠️  Your panel supports variable refresh (ProMotion). For SSVEP we need a")
-        print("    FIXED rate during the whole session — in Phase 4 we'll force the display")
-        print("    to a fixed refresh mode (e.g. via System Settings > Displays, or")
-        print("    programmatically) before deriving stimulus frequencies from it.")
+        print("\nYour panel supports variable refresh (ProMotion)")
 
     perms_ok = verify_pyautogui_permissions()
 

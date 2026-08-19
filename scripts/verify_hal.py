@@ -1,11 +1,3 @@
-"""
-Phase 2 checkpoint: proves end-to-end HAL discovery + channel mapping + resampling
-against the mock_playback stream.
-
-Run in TWO terminals:
-  Terminal A: python hardware/playback.py --source synthetic
-  Terminal B: python scripts/verify_hal.py
-"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -34,4 +26,4 @@ if __name__ == "__main__":
         if n_chunks >= 5:
             break
 
-    print("\n✅ HAL pipeline verified: discovery -> channel mapping -> resampling all working.")
+    print("\nHAL pipeline verified")

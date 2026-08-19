@@ -77,8 +77,7 @@ if __name__ == "__main__":
 
     if args.source == "dataset":
         raise NotImplementedError(
-            "Dataset playback wires into MOABB-fetched recordings — built in Phase 3 "
-            "once we've pulled the BCI Competition III data. Use --source synthetic for now."
+            "Dataset playback wires into MOABB-fetched recordings"
         )
 
     stream_synthetic(chunk_size=args.chunk_size)
