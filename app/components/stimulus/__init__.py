@@ -23,3 +23,15 @@ def render_p300(grid: list[list[str]], flash_ms=100, isi_ms=75, cell_size=80,
         "origin": {"x": origin[0], "y": origin[1]},
     }
     return _component(mode="p300", config=config, width=width, height=height, key=key, default=None)
+
+
+def render_p300_controlled(grid: list[list[str]], active_row=None, active_col=None,
+                            cell_size=80, origin=(50, 50), width=900, height=550, key=None):
+    config = {
+        "grid": grid,
+        "cell_size": cell_size,
+        "origin": {"x": origin[0], "y": origin[1]},
+        "active_row": active_row,
+        "active_col": active_col,
+    }
+    return _component(mode="p300_controlled", config=config, width=width, height=height, key=key, default=None)
