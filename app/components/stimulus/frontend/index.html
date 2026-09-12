@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; background: #14141a; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script>
+function sendMessage(type, extra) {
+  window.parent.postMessage(Object.assign({ type, isStreamlitMessage: true }, extra || {}), "*");
+}
+function setComponentReady() { sendMessage("streamlit:componentReady", { apiVersion: 1 }); }
+function setFrameHeight(height) { sendMessage("streamlit:setFrameHeight", { height }); }
+function setComponentValue(value) { sendMessage("streamlit:setComponentValue", { value }); }
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+
+let mode = null;
+let config = {};
+let flashEvents = [];
+let scheduler = { sequence: [], activeRow: null, activeCol: null, lastSwitch: 0 };
+
+function reshuffleSchedule(nRows, nCols) {
+  const seq = [];
+  for (let i = 0; i < nRows; i++) seq.push({ idx: i, isRow: true });
+  for (let i = 0; i < nCols; i++) seq.push({ idx: i, isRow: false });
+  for (let i = seq.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [seq[i], seq[j]] = [seq[j], seq[i]];
+  }
+  return seq;
+}
+
+function drawSSVEP(t) {
+  ctx.fillStyle = "#14141a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = "15px sans-serif";
+  ctx.textAlign = "center";
+  for (const target of config.targets) {
+    const on = Math.floor(t * 2 * target.freq_hz) % 2 === 0;
+    ctx.fillStyle = on ? "#ffffff" : "#1e1e26";
+    ctx.fillRect(target.x, target.y, target.w, target.h);
+    ctx.fillStyle = on ? "#000000" : "#666666";
+    ctx.fillText(`${target.label}`, target.x + target.w / 2, target.y + target.h / 2 - 4);
+    ctx.fillText(`${target.freq_hz}Hz`, target.x + target.w / 2, target.y + target.h / 2 + 14);
+  }
+}
+
+function drawP300(now) {
+  const { grid, flash_ms, isi_ms, cell_size, origin } = config;
+  const nRows = grid.length, nCols = grid[0].length;
+  const cyclePeriod = flash_ms + isi_ms;
+
+  if (now - scheduler.lastSwitch >= cyclePeriod) {
+    scheduler.lastSwitch = now;
+    if (scheduler.sequence.length === 0) scheduler.sequence = reshuffleSchedule(nRows, nCols);
+    const next = scheduler.sequence.pop();
+    scheduler.activeRow = next.isRow ? next.idx : null;
+    scheduler.activeCol = next.isRow ? null : next.idx;
+    flashEvents.push({ row: scheduler.activeRow, col: scheduler.activeCol, t_ms: now });
+  }
+
+  const flashing = (now - scheduler.lastSwitch) < flash_ms;
+
+  ctx.fillStyle = "#14141a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = "28px sans-serif";
+  ctx.textAlign = "center";
+
+  for (let r = 0; r < nRows; r++) {
+    for (let c = 0; c < nCols; c++) {
+      const isActive = flashing && (scheduler.activeRow === r || scheduler.activeCol === c);
+      const x = origin.x + c * cell_size;
+      const y = origin.y + r * cell_size;
+      ctx.fillStyle = isActive ? "#ffffff" : "#3c3c46";
+      ctx.fillRect(x, y, cell_size - 4, cell_size - 4);
+      ctx.fillStyle = isActive ? "#000000" : "#c8c8c8";
+      ctx.fillText(grid[r][c], x + cell_size / 2 - 2, y + cell_size / 2 + 8);
+    }
+  }
+}
+
+function loop(nowMs) {
+  const t = nowMs / 1000.0;
+  if (mode === "ssvep") {
+    drawSSVEP(t);
+  } else if (mode === "p300") {
+    drawP300(nowMs);
+    if (flashEvents.length >= 40) {
+      setComponentValue({ flash_events: flashEvents });
+      flashEvents = [];
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  const args = event.data.args;
+  mode = args.mode;
+  config = args.config;
+  canvas.width = args.width || 900;
+  canvas.height = args.height || 500;
+  setFrameHeight(canvas.height);
+});
+
+setComponentReady();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
