@@ -63,7 +63,29 @@ graph TD
 
 ## Screenshots
 
-Drop screenshots from your own run into `docs/assets/` and reference them here — e.g. `research_demo.png`, `p300_calibration.png`, `ssvep_validation.png`. (Not shipped in this repo since they were captured during development, not saved as static assets.)
+**Home** — entry point, links to the demo and both calibration wizards
+
+![Home](docs/assets/home.png)
+
+**Research Demo** — real benchmark numbers from public data, plus a live SSVEP preview
+
+![Research Demo](docs/assets/Research_Demo.png)
+
+**P300 Setup — mid-calibration** — live flash matrix, on-screen instructions, progress bar
+
+![P300 calibration in progress](docs/assets/p300-calibration.png)
+
+**P300 Setup — results** — personal model vs. warm-started (blended with public data)
+
+![P300 calibration results](docs/assets/p300-result.png)
+
+**SSVEP Setup — validation** — live per-target countdown and trial progress
+
+![SSVEP validation in progress](docs/assets/ssvep-validation.png)
+
+**SSVEP Setup — results** — per-trial accuracy against the attended frequency
+
+![SSVEP validation results](docs/assets/ssvep-result.png)
 
 ## Results
 
