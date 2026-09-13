@@ -23,7 +23,6 @@ class CCAClassifier:
     def predict(self, X):
         n_samples = X.shape[-1]
         refs = make_reference_signals(self.freqs, self.n_harmonics, n_samples, self.sfreq)
-
         preds = []
         for epoch in X:
             scores = []

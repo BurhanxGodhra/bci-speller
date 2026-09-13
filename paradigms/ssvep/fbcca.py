@@ -26,7 +26,6 @@ class FBCCAClassifier:
     def predict(self, X):
         n_samples = X.shape[-1]
         refs = make_reference_signals(self.freqs, self.n_harmonics, n_samples, self.sfreq)
-
         preds = []
         for epoch in X:
             bands = filter_bank(epoch, self.sfreq, self.n_bands)

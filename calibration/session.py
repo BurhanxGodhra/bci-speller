@@ -47,6 +47,8 @@ class CalibrationRunner:
         self.is_done = False
         self.error = None
         self.result = None  # (eeg, eeg_ts, events, sample_rate)
+        self.flashes_done = 0
+        self.total_flashes = n_repetitions * 12
 
         self._thread = threading.Thread(target=self._run, daemon=True)
 
@@ -76,6 +78,7 @@ class CalibrationRunner:
                     time.sleep(self.flash_ms / 1000.0)
 
                     self.active_row, self.active_col = None, None
+                    self.flashes_done += 1
                     time.sleep(self.isi_ms / 1000.0)
 
             time.sleep(0.5)
