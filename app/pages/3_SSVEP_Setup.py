@@ -7,11 +7,12 @@ import streamlit as st
 
 from calibration.ssvep_session import SSVEPCalibrationRunner, SSVEP_TARGETS
 from calibration.ssvep_epoching import extract_ssvep_trials
+from calibration.mock_stream_control import start_mock_stream, stop_mock_stream, is_running
 from paradigms.ssvep.fbcca import FBCCAClassifier
 from app.components.stimulus import render_ssvep
 
 st.set_page_config(page_title="SSVEP Setup", layout="wide")
-st.title("Your Setup — SSVEP Validation")
+st.title("SSVEP Setup — Validation")
 
 st.markdown(
     "**What this does:** the 4 boxes below flicker at different speeds. Staring at one "
@@ -23,8 +24,23 @@ st.markdown(
     "**What you do:** one box at a time will be marked **ATTEND**. Stare directly at "
     "that box, and try not to blink or look away, until it moves to the next one."
 )
-st.caption("Requires an LSL EEG stream running (real headset or hardware/playback.py --source synthetic)")
 
+if "mock_stream_proc" not in st.session_state:
+    st.session_state.mock_stream_proc = None
+
+with st.expander("EEG source", expanded=not is_running(st.session_state.mock_stream_proc)):
+    if is_running(st.session_state.mock_stream_proc):
+        st.success("Synthetic mock stream running (started from this app).")
+        if st.button("Stop mock stream", key="ssvep_stop_stream"):
+            stop_mock_stream(st.session_state.mock_stream_proc)
+            st.session_state.mock_stream_proc = None
+            st.rerun()
+    else:
+        st.info("No mock stream running. Start one here for testing, or connect a real headset separately and skip this.")
+        if st.button("Start synthetic mock stream", key="ssvep_start_stream"):
+            st.session_state.mock_stream_proc = start_mock_stream()
+            time.sleep(1.5)
+            st.rerun()
 trial_seconds = st.slider("Seconds per target", 2.0, 8.0, 4.0)
 n_repeats = st.slider("Repeats per target", 1, 3, 1)
 
@@ -44,7 +60,7 @@ if runner is not None:
         current_label = SSVEP_TARGETS[runner.current_target_idx]["label"]
         elapsed = time.time() - runner.trial_start_time if runner.trial_start_time else 0
         remaining = max(0.0, runner.trial_seconds - elapsed)
-        st.info(f" Stare at **{current_label}** — {remaining:.1f}s remaining")
+        st.info(f"👁️ Stare at **{current_label}** — {remaining:.1f}s remaining")
         st.progress((runner.trial_index + 1) / runner.total_trials)
         st.caption(f"Trial {runner.trial_index + 1} of {runner.total_trials}")
     elif not runner.is_done:

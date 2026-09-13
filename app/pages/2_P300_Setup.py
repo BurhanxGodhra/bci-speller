@@ -7,11 +7,12 @@ import streamlit as st
 
 from calibration.session import CalibrationRunner, GRID
 from calibration.epoching import extract_epochs
+from calibration.mock_stream_control import start_mock_stream, stop_mock_stream, is_running
 from paradigms.p300.classifier import evaluate_pipeline
 from app.components.stimulus import render_p300_controlled
 
-st.set_page_config(page_title="Your Setup", layout="wide")
-st.title("Your Setup — P300 Calibration")
+st.set_page_config(page_title="P300 Setup", layout="wide")
+st.title("P300 Setup — Calibration")
 
 st.markdown(
     "**What this does:** the grid below will flash rows and columns of letters in "
@@ -24,7 +25,23 @@ st.markdown(
     "on that letter the entire time — don't look around the grid. You'll see it flash "
     "along with others; just keep watching it."
 )
-st.caption("Requires an LSL EEG stream running (real headset or hardware/playback.py --source synthetic)")
+
+if "mock_stream_proc" not in st.session_state:
+    st.session_state.mock_stream_proc = None
+
+with st.expander("EEG source", expanded=not is_running(st.session_state.mock_stream_proc)):
+    if is_running(st.session_state.mock_stream_proc):
+        st.success("Synthetic mock stream running (started from this app).")
+        if st.button("Stop mock stream", key="p300_stop_stream"):
+            stop_mock_stream(st.session_state.mock_stream_proc)
+            st.session_state.mock_stream_proc = None
+            st.rerun()
+    else:
+        st.info("No mock stream running. Start one here for testing, or connect a real headset separately and skip this.")
+        if st.button("Start synthetic mock stream", key="p300_start_stream"):
+            st.session_state.mock_stream_proc = start_mock_stream()
+            time.sleep(1.5)
+            st.rerun()
 
 target_letter = st.selectbox("Which letter will you attend to?", [c for row in GRID for c in row])
 n_reps = st.slider("Repetitions", 5, 20, 10, help="More repetitions = more data = usually better accuracy, but longer session")
@@ -42,7 +59,7 @@ runner = st.session_state.runner
 
 if runner is not None:
     if not runner.is_done:
-        st.info(f" Keep your eyes on **{runner.target_letter}** — don't look at any other letter until this finishes.")
+        st.info(f"👁️ Keep your eyes on **{runner.target_letter}** — don't look at any other letter until this finishes.")
         st.progress(runner.flashes_done / runner.total_flashes)
         st.caption(f"Flash {runner.flashes_done} of {runner.total_flashes}")
 

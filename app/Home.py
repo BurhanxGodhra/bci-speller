@@ -9,5 +9,6 @@ st.write(
 st.write("Use the sidebar to explore:")
 st.markdown(
     "- **Research Demo** — benchmark results from public BCI datasets (not personalized)\n"
-    "- **Your Setup** — connect your own headset and calibrate a personal model"
+    "- **P300 Setup** — connect your own headset, record calibration data, train a personal P300 model\n"
+    "- **SSVEP Setup** — validate whether SSVEP detection works on your own headset (no training needed)"
 )

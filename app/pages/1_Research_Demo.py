@@ -10,7 +10,7 @@ st.set_page_config(page_title="Research Demo", layout="wide")
 st.title("Research Demo")
 st.info(
     "Results below are from public research datasets (BNCI2014009, Nakanishi2015), "
-    "not from a personal calibration. See **Your Setup** to train a model on your own data."
+    "not from a personal calibration. See **P300 Setup** or **SSVEP Setup** to train/validate on your own data."
 )
 
 st.header("P300 speller — xDAWN + shrinkage LDA")
