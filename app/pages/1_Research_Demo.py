@@ -29,7 +29,7 @@ st.caption(
     "CCA/FBCCA need no training data at all."
 )
 
-st.header("Closed-loop demo — FBCCA + OS keypress injection")
+st.header("Offline replay -> online decoder -> OS keypress injection (FBCCA)")
 col1, col2, col3 = st.columns(3)
 col1.metric("Selections", "15")
 col2.metric("Accuracy", "86.67%")

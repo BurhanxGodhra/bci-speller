@@ -11,15 +11,17 @@ An end-to-end brain-computer interface speller built on two classic paradigms (P
 - A hardware abstraction layer with LSL auto-discovery, per-device channel mapping (with declared fallback for headsets missing electrodes), polyphase resampling, and online artifact rejection (amplitude / peak-to-peak / sliding-window variance)
 - A P300 speller: xDAWN spatial filtering + shrinkage-LDA, trained and cross-validated on real public data
 - An SSVEP engine: standard CCA, filter-bank CCA, and a supervised CNN baseline, compared head-to-head on the same dataset
-- A closed-loop demo wiring classifier output to `pyautogui` system keypress injection, with real-time ITR (Wolpaw formula) reported
+- An offline-replay demo wiring classifier output to `pyautogui` system keypress injection, with real-time ITR (Wolpaw formula) reported — classifies pre-recorded epochs live and types the result; not a live-headset closed loop (see **What this is not**)
 - A local GPT-2 predictive-text layer integrated into a pygame speller UI
 - A Streamlit app with two halves: a **Research Demo** showing the numbers above, and a **Your Setup** flow that walks a real user through connecting their own LSL stream, recording calibration data with proper marker-to-EEG sync, and training (P300) or validating (SSVEP) against their own signal — including a warm-start scheme that blends a public-data prior model with the user's personal one while they still have little data of their own
 
 ## What this is not
 
+- **Not a real-time closed loop.** The "offline replay" demo classifies pre-recorded `Nakanishi2015` epochs, paced with `time.sleep()`, and types the result — there's no live headset feeding the classifier in a real-time loop. Calling this "closed-loop" would be overclaiming; it's an online *decoder* demo running on offline *data*, not a live EEG closed loop. A real closed loop is still on the roadmap (see below).
 - **Not tested on real EEG hardware.** Every number below comes from public research datasets or a synthetic mock LSL stream. The calibration pipeline is verified to be *plumbed correctly* — marker timestamps line up with recorded EEG exactly as the flash schedule predicts — not verified to *detect a real person's signal*, because no real headset has been connected to it.
 - **Not a solved calibration problem.** The warm-start prior model only overlaps the personal calibration montage on 3 of 5 channels (`Oz`, `Cz`, `Pz` — BNCI2014009 doesn't have `O1`/`O2`), so its usefulness is capped by that overlap. SSVEP "calibration" isn't training at all — CCA/FBCCA are zero-shot by design, so that wizard is a detectability check, not a model-fitting step.
 - **Not benchmarked against a Riemannian/CSP baseline for either paradigm** — xDAWN+LDA and CCA/FBCCA were chosen as the standard, well-published approach for each paradigm respectively, not because they were shown to beat the alternatives here.
+- **P300 is only validated at the flash level, not the character level.** The 88.4% figure is flash-by-flash target/non-target classification, not "how often does it spell the right letter" — row/column vote aggregation into an actual character decision isn't built yet (see Roadmap).
 - **Not reviewed for clinical or assistive use.** No consent process, no usability testing with an actual target user, no safety review. This is a portfolio-grade systems project, not an assistive device.
 
 ## Architecture
@@ -49,7 +51,7 @@ graph TD
         J --> L[Research Demo /<br/>Your Setup pages]
     end
 
-    subgraph Output["Closed Loop"]
+    subgraph Output["Offline Replay -> OS Output"]
         F --> M[pyautogui keypress<br/>injection]
         M --> N[Wolpaw ITR<br/>calculation]
     end
@@ -93,9 +95,9 @@ Summary below — full methodology, per-fold breakdowns, and the calibration-pip
 
 | System | Result |
 |---|---|
-| P300 (xDAWN + shrinkage-LDA), `BNCI2014009` subject 1 | 88.4% ± 1.8% accuracy, 0.918 ± 0.013 ROC-AUC (5-fold CV) |
+| P300 (xDAWN + shrinkage-LDA), `BNCI2014009` subject 1 | 88.4% ± 1.8% accuracy, 0.918 ± 0.013 ROC-AUC (5-fold CV) — majority-class baseline (always predict non-target) is 83.3%, so read AUC as the real signal, not accuracy |
 | SSVEP FBCCA, `Nakanishi2015` subject 1 (12-class) | 77.8% (vs. CCA 70.4%, supervised CNN 7.4% — too little data) |
-| Closed loop (FBCCA + OS keypress injection) | 86.67% accuracy, 38.36 bits/min ITR, 15 selections |
+| Offline replay -> online decoder -> OS keypress injection (FBCCA, pre-recorded epochs, not a live headset loop) | 86.67% accuracy, 38.36 bits/min ITR, 15 selections |
 | Calibration marker-EEG sync (mock stream) | 119 epochs extracted, target/non-target counts matched flash schedule exactly |
 
 ## Setup
@@ -117,7 +119,7 @@ export PYLSL_LIB=/opt/homebrew/lib/liblsl.dylib   # add to ~/.zshrc to persist
 
 ## Running the system
 
-**No hardware available?** Everything below can run against a synthetic mock stream:
+**No hardware available?** The app can start/stop a synthetic mock stream itself (see the "EEG source" section on either setup page) — no separate terminal needed there. For the CLI scripts below, start it manually:
 
 ```bash
 python hardware/playback.py --source synthetic
@@ -172,10 +174,12 @@ Structural, not fixable by more time on this laptop alone:
 ## Engineering Roadmap
 
 1. **Real hardware validation.** The only way to know if any of the calibration machinery here actually detects a real person's signal. Everything else is downstream of this.
-2. **Cross-subject / leave-one-subject-out evaluation** for both paradigms, to quantify how much the reported single-subject numbers would move on a different person — directly relevant to how much the warm-start prior model can be trusted for someone who isn't in the training set.
-3. **Adaptive calibration stopping.** Currently fixed repetition counts; tracking live cross-validated accuracy during a session and stopping early where confidence is already high (or extending where it isn't) would cut real calibration time, which is the actual adoption bottleneck for BCI in general.
-4. **Riemannian/CSP baseline for P300**, to know whether xDAWN+LDA's numbers reflect a genuine advantage or are simply what any reasonable spatial-filtering approach gets on this dataset.
-5. **Automated test suite.** The verification scripts under `scripts/verify_*.py` are manual, one-off checks; converting the numerical ones (channel mapping, resampling ratio, artifact thresholds, ITR formula) into a real `tests/` suite would catch regressions instead of relying on rereading terminal output.
+2. **Character-level P300 spelling accuracy.** Aggregate flash-level scores into row/column votes and an actual character decision — the flash-level 88.4% doesn't tell you how often the system spells the right letter, which is the metric that actually matters for a speller.
+3. **A genuine real-time closed loop.** Replace the offline-replay demo with a live LSL headset feeding a causal, sample-by-sample decoder (this also means replacing `filtfilt` in `fbcca.py` with a causal filter — see `ARCHITECTURE.md`).
+4. **Cross-subject / leave-one-subject-out evaluation** for both paradigms, to quantify how much the reported single-subject numbers would move on a different person — directly relevant to how much the warm-start prior model can be trusted for someone who isn't in the training set.
+5. **Adaptive calibration stopping.** Currently fixed repetition counts; tracking live cross-validated accuracy during a session and stopping early where confidence is already high (or extending where it isn't) would cut real calibration time, which is the actual adoption bottleneck for BCI in general.
+6. **Riemannian/CSP baseline for P300**, to know whether xDAWN+LDA's numbers reflect a genuine advantage or are simply what any reasonable spatial-filtering approach gets on this dataset.
+7. **Automated test suite.** The verification scripts under `scripts/verify_*.py` are manual, one-off checks; converting the numerical ones (channel mapping, resampling ratio, artifact thresholds, ITR formula) into a real `tests/` suite would catch regressions instead of relying on rereading terminal output.
 
 ## Citations
 

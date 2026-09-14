@@ -21,3 +21,6 @@ data/mock_recordings/*
 *.bin
 *.gguf
 models/
+
+# Cached warm-start prior model (regenerated on first run)
+calibration/cache/*.joblib

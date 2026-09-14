@@ -1,3 +1,15 @@
+"""
+Offline-replay -> online decoder -> OS-output demo.
+
+Classifies pre-recorded Nakanishi2015 SSVEP trials one at a time (paced with
+time.sleep to simulate trial timing) and types the predicted letter via
+pyautogui. This is NOT a real-time closed loop -- there's no live headset
+feeding the classifier. It demonstrates the decoder-to-OS-output path and
+measures ITR on known-label data; a genuine closed loop would need a live
+LSL stream and a causal (not filtfilt-based) decoder -- see
+docs/ARCHITECTURE.md and the Roadmap in README.md.
+"""
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

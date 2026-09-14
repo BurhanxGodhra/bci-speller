@@ -9,7 +9,7 @@ Every number here comes from an actual run logged during this build — none of 
 ## P300 — xDAWN + shrinkage-LDA
 
 **Dataset:** `BNCI2014009` (Aricò et al., 2014), subject 1 only, loaded via MOABB's `P300` paradigm.
-**Data:** 1728 epochs, 16 channels, 206 timepoints/epoch (~0.8s @ ~257Hz). 288 target / 1440 non-target (16.7% target rate).
+**Data:** 1728 epochs, 16 channels, 206 timepoints/epoch (~0.8s @ ~257Hz). 288 target / 1440 non-target (16.7% target rate — a classifier that always predicts non-target gets 83.3% accuracy for free, which is why AUC is the metric that actually matters here, not the accuracy number below).
 **Evaluation:** 5-fold stratified cross-validation (stratified specifically because of the class imbalance — a plain K-fold risks a fold with almost no target examples).
 
 | Fold | Accuracy | ROC-AUC |

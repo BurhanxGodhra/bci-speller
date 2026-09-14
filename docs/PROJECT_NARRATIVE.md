@@ -14,9 +14,9 @@ P300 used xDAWN spatial filtering plus shrinkage-LDA, trained on `BNCI2014009`. 
 
 SSVEP compared CCA, FBCCA, and a supervised CNN on `Nakanishi2015`. FBCCA beat CCA by a solid margin (77.8% vs 70.4%), as expected from the original FBCCA paper. The CNN scored 7.4% — barely above the 8.3% chance level for 12 classes. That's not a bug: with 180 total epochs across 12 classes, there's roughly 10 examples per class, nowhere near enough for a CNN with no augmentation to learn anything. It's kept in the results specifically because it demonstrates, concretely, why CCA/FBCCA — which need no training data — are the standard choice for SSVEP.
 
-## Phase 5–7: artifact rejection, UI, closed loop
+## Phase 5–7: artifact rejection, UI, offline-replay decoder demo
 
-Artifact rejection (amplitude threshold, peak-to-peak, sliding-window variance) got wired into the HAL's streaming interface. The pygame speller UI combined a P300 flash matrix, SSVEP flicker targets, and local GPT-2 predictive text — with keyboard input standing in for classifier output until the closed-loop phase. Phase 7 replaced the keyboard with real `pyautogui` injection driven by FBCCA classifying held-out labeled trials, plus a Wolpaw ITR calculation: 86.67% accuracy, 38.36 bits/min over 15 selections.
+Artifact rejection (amplitude threshold, peak-to-peak, sliding-window variance) got wired into the HAL's streaming interface. The pygame speller UI combined a P300 flash matrix, SSVEP flicker targets, and local GPT-2 predictive text — with keyboard input standing in for classifier output until Phase 7. Phase 7 replaced the keyboard with real `pyautogui` injection driven by FBCCA classifying held-out labeled trials (pre-recorded, not a live headset — this isn't a real-time closed loop, see `README.md`), plus a Wolpaw ITR calculation: 86.67% accuracy, 38.36 bits/min over 15 selections.
 
 ## Extending into the app: where the real debugging happened
 

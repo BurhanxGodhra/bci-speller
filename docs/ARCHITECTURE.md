@@ -19,6 +19,8 @@ P300 and SSVEP are siblings, not a shared "signal processing" module — their m
 - **`p300/`** — `epoching.py` loads MOABB data (optionally restricted to a channel subset, used by the warm-start prior model — see below); `xdawn.py` wraps `pyriemann.estimation.Xdawn` as an sklearn-compatible transformer; `classifier.py` chains it into a shrinkage-LDA pipeline with stratified cross-validation.
 - **`ssvep/`** — `cca.py` builds sine/cosine reference signals per candidate frequency and computes canonical correlation; `fbcca.py` extends this with a filter bank over harmonic sub-bands, weighted by band index. Both are zero-shot — no `.fit()` step exists because none is needed, which is the entire point of CCA-family methods for SSVEP.
 
+  Two things worth being precise about: the filter bank (`6-80Hz, 12-80Hz, 18-80Hz, ...`) is a simplified custom design, not a reproduction of Chen et al. (2015)'s exact sub-band configuration — the general sign-weighted squared-correlation fusion strategy matches the paper, the specific band edges don't. Separately, `filter_bank()` uses `scipy.signal.filtfilt`, which is zero-phase but non-causal — it needs the entire segment already captured before it can run. That's fine for how it's used here (classifying a fixed, already-captured trial window), but it means this implementation could not be dropped into a true sample-by-sample streaming decoder without replacing it with a causal filter (state-carrying IIR/SOS or overlap-save FIR) — see Roadmap.
+
 ## Calibration (`calibration/`)
 
 This is where "the algorithm works on a benchmark dataset" and "a real person could use this" diverge, and where most of the actual engineering problems in this project turned up.
