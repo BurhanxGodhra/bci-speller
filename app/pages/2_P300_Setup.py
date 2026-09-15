@@ -106,6 +106,31 @@ if runner is not None:
                         st.metric("Accuracy", f"{blend_results['blended_accuracy']:.1%}")
                         st.metric("ROC-AUC", f"{blend_results['blended_auc']:.3f}")
 
+                    from calibration.character_decode import evaluate_character_accuracy, decode_character
+                    st.subheader("Character-level decode")
+                    st.caption(
+                        "Flash-level accuracy above doesn't tell you whether the system actually "
+                        "spells the right letter. This splits your session in half by repetition -- "
+                        "first half trains, second half is a genuinely held-out spelling attempt -- "
+                        "and checks how many repetitions were needed to correctly decode the letter."
+                    )
+                    try:
+                        target_row, target_col = None, None
+                        for _, row, col, is_target in events:
+                            if is_target and row is not None:
+                                target_row = row
+                            if is_target and col is not None:
+                                target_col = col
+                        char_results = evaluate_character_accuracy(X, y, events, target_row, target_col)
+                        for k, correct, pred_row, pred_col in char_results:
+                            pred_letter = GRID[pred_row][pred_col]
+                            icon = "✅" if correct else "❌"
+                            outcome = "correct" if correct else f"attended '{runner.target_letter}'"
+                            st.write(f"{icon} After {k} repetition{'s' if k > 1 else ''}: "
+                                     f"predicted '{pred_letter}' ({outcome})")
+                    except ValueError as e:
+                        st.warning(f"Not enough repetitions to evaluate character-level decoding: {e}")
+
                     with st.expander("What do these numbers mean?"):
                         st.markdown(
                             "- **Accuracy** — how often the model correctly told target flashes apart from "

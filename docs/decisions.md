@@ -67,3 +67,9 @@ P300 needs precise, low-jitter flash-onset timestamps for accurate epoching (the
 **D-011 — NSScreen query over software frame-timing for authoritative refresh rate**
 
 Timing a small windowed SDL2 surface (even with `Renderer(vsync=True)`) is not reliable on macOS — it reported physically impossible refresh rates (96Hz, then 131Hz) on a MacBook Air with a fixed 60Hz panel. Queried `NSScreen.maximumFramesPerSecond()` via `pyobjc` instead, which correctly reports both fixed-rate panels and ProMotion's variable-rate ceiling. Software-measured frame timing was kept only as a clearly-labeled, non-authoritative sanity check.
+
+---
+
+**D-012 — Test character-level decode with a non-corner target letter, not just the first one tried**
+
+First validation run used target letter "A" (grid position row 0, col 0) and decoded correctly at every repetition count. That result is ambiguous on its own: a classifier that silently defaults to predicting index 0 regardless of input would produce the exact same outcome as a classifier genuinely tracking the target, since "A" sits at the (0, 0) origin both cases would converge to. Re-ran with "E" (row 0, col 4) specifically to break that ambiguity — predictions varied across repetition counts ('1', 'C', 'I', 'K', 'K') rather than converging on a single fixed answer, which rules out a default-to-zero bug and confirms the vote-aggregation logic responds to its actual input. It also confirms, honestly, that decode accuracy on synthetic noise is exactly as unreliable as it should be — see `docs/BENCHMARKS.md`.

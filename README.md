@@ -21,7 +21,7 @@ An end-to-end brain-computer interface speller built on two classic paradigms (P
 - **Not tested on real EEG hardware.** Every number below comes from public research datasets or a synthetic mock LSL stream. The calibration pipeline is verified to be *plumbed correctly* — marker timestamps line up with recorded EEG exactly as the flash schedule predicts — not verified to *detect a real person's signal*, because no real headset has been connected to it.
 - **Not a solved calibration problem.** The warm-start prior model only overlaps the personal calibration montage on 3 of 5 channels (`Oz`, `Cz`, `Pz` — BNCI2014009 doesn't have `O1`/`O2`), so its usefulness is capped by that overlap. SSVEP "calibration" isn't training at all — CCA/FBCCA are zero-shot by design, so that wizard is a detectability check, not a model-fitting step.
 - **Not benchmarked against a Riemannian/CSP baseline for either paradigm** — xDAWN+LDA and CCA/FBCCA were chosen as the standard, well-published approach for each paradigm respectively, not because they were shown to beat the alternatives here.
-- **P300 is only validated at the flash level, not the character level.** The 88.4% figure is flash-by-flash target/non-target classification, not "how often does it spell the right letter" — row/column vote aggregation into an actual character decision isn't built yet (see Roadmap).
+- **Character-level decode exists but hasn't been validated on real signal.** Row/column vote aggregation into an actual letter decision is built (`calibration/character_decode.py`, live in the P300 Setup wizard), but on synthetic data it's exactly as unreliable as it should be — see `docs/BENCHMARKS.md` for two real example runs, including one that decoded correctly by coincidence and one that didn't, with predictions that visibly shift across repetition counts rather than settling on a fixed wrong answer (confirming the aggregation logic responds to input rather than silently defaulting). Whether it works on a real signal is untested.
 - **Not reviewed for clinical or assistive use.** No consent process, no usability testing with an actual target user, no safety review. This is a portfolio-grade systems project, not an assistive device.
 
 ## Architecture
@@ -95,8 +95,8 @@ Summary below — full methodology, per-fold breakdowns, and the calibration-pip
 
 | System | Result |
 |---|---|
-| P300 (xDAWN + shrinkage-LDA), `BNCI2014009` subject 1 | 88.4% ± 1.8% accuracy, 0.918 ± 0.013 ROC-AUC (5-fold CV) — majority-class baseline (always predict non-target) is 83.3%, so read AUC as the real signal, not accuracy |
-| SSVEP FBCCA, `Nakanishi2015` subject 1 (12-class) | 77.8% (vs. CCA 70.4%, supervised CNN 7.4% — too little data) |
+| P300 (xDAWN + shrinkage-LDA), `BNCI2014009` subject 1 | 88.4% ± 1.8% accuracy (0.783 balanced accuracy — majority-class baseline is 83.3%), 0.918 ± 0.013 ROC-AUC (5-fold CV) |
+| SSVEP FBCCA, `Nakanishi2015` subject 1 (12-class) | 77.8% zero-shot (vs. CCA 70.4%; supervised CNN stays near chance at every calibration budget tested, up to the dataset's max of 10 examples/class — see `docs/BENCHMARKS.md`) |
 | Offline replay -> online decoder -> OS keypress injection (FBCCA, pre-recorded epochs, not a live headset loop) | 86.67% accuracy, 38.36 bits/min ITR, 15 selections |
 | Calibration marker-EEG sync (mock stream) | 119 epochs extracted, target/non-target counts matched flash schedule exactly |
 
@@ -174,7 +174,7 @@ Structural, not fixable by more time on this laptop alone:
 ## Engineering Roadmap
 
 1. **Real hardware validation.** The only way to know if any of the calibration machinery here actually detects a real person's signal. Everything else is downstream of this.
-2. **Character-level P300 spelling accuracy.** Aggregate flash-level scores into row/column votes and an actual character decision — the flash-level 88.4% doesn't tell you how often the system spells the right letter, which is the metric that actually matters for a speller.
+2. **Validate character-level decode on real signal.** The row/column vote aggregation itself is built and behaves correctly (see `docs/BENCHMARKS.md`), but has only been exercised on synthetic noise, where it should — and does — perform unreliably. Whether it actually stabilizes into correct decodes given real EEG signal is untested.
 3. **A genuine real-time closed loop.** Replace the offline-replay demo with a live LSL headset feeding a causal, sample-by-sample decoder (this also means replacing `filtfilt` in `fbcca.py` with a causal filter — see `ARCHITECTURE.md`).
 4. **Cross-subject / leave-one-subject-out evaluation** for both paradigms, to quantify how much the reported single-subject numbers would move on a different person — directly relevant to how much the warm-start prior model can be trusted for someone who isn't in the training set.
 5. **Adaptive calibration stopping.** Currently fixed repetition counts; tracking live cross-validated accuracy during a session and stopping early where confidence is already high (or extending where it isn't) would cut real calibration time, which is the actual adoption bottleneck for BCI in general.
