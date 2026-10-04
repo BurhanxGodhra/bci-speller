@@ -1,194 +1,58 @@
-![Python](https://img.shields.io/badge/python-3.11-blue) ![MNE](https://img.shields.io/badge/MNE-1.x-2ea44f) ![Streamlit](https://img.shields.io/badge/Streamlit-app-FF4B4B?logo=streamlit&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green)
-
 # Dual-Paradigm BCI Speller — P300 + SSVEP
 
-An end-to-end brain-computer interface speller built on two classic paradigms (P300 and SSVEP), with online artifact rejection, LLM-assisted predictive text, OS-level keypress output, and a browser-based calibration tool for connecting a real headset. Built as a systems exercise: take two published BCI decoding methods from research paper to a working pipeline with a hardware abstraction layer, a real-time calibration workflow, and an honest account of exactly where "working on public research data" stops and "working for a real person on real hardware" would need to start.
+A research-data BCI speller that compares P300 and SSVEP decoding, provides a Streamlit calibration workflow, and keeps replayed keyboard output distinct from a true live-headset closed loop.
 
-**Further reading:** [`docs/PROJECT_NARRATIVE.md`](docs/PROJECT_NARRATIVE.md) (the full build story, bugs and all) · [`docs/decisions.md`](docs/decisions.md) (engineering decision log) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (subsystem-by-subsystem design) · [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) (full methodology + per-fold numbers)
+## Results
 
-## What this is
+Reported by the repository's benchmark suite; these numbers were not rerun during this review.
 
-- A hardware abstraction layer with LSL auto-discovery, per-device channel mapping (with declared fallback for headsets missing electrodes), polyphase resampling, and online artifact rejection (amplitude / peak-to-peak / sliding-window variance)
-- A P300 speller: xDAWN spatial filtering + shrinkage-LDA, trained and cross-validated on real public data
-- An SSVEP engine: standard CCA, filter-bank CCA, and a supervised CNN baseline, compared head-to-head on the same dataset
-- An offline-replay demo wiring classifier output to `pyautogui` system keypress injection, with real-time ITR (Wolpaw formula) reported — classifies pre-recorded epochs live and types the result; not a live-headset closed loop (see **What this is not**)
-- A local GPT-2 predictive-text layer integrated into a pygame speller UI
-- A Streamlit app with two halves: a **Research Demo** showing the numbers above, and a **Your Setup** flow that walks a real user through connecting their own LSL stream, recording calibration data with proper marker-to-EEG sync, and training (P300) or validating (SSVEP) against their own signal — including a warm-start scheme that blends a public-data prior model with the user's personal one while they still have little data of their own
+| Paradigm / test | Result |
+|---|---|
+| P300, BNCI2014009 subject 1, 5-fold CV | 88.4% ± 1.8% accuracy; 0.783 balanced accuracy; 0.918 ± 0.013 ROC-AUC |
+| SSVEP FBCCA, Nakanishi2015 subject 1, 12 classes | 77.8% zero-shot accuracy; standard CCA reports 70.4% |
+| Paced replay to online decoder and OS keypress | 86.67% accuracy and 38.36 bits/min over 15 selections; uses prerecorded epochs, not a live EEG loop |
+| Mock calibration synchronization | 119 epochs; marker counts matched the flash schedule |
 
-## What this is not
-
-- **Not a real-time closed loop.** The "offline replay" demo classifies pre-recorded `Nakanishi2015` epochs, paced with `time.sleep()`, and types the result — there's no live headset feeding the classifier in a real-time loop. Calling this "closed-loop" would be overclaiming; it's an online *decoder* demo running on offline *data*, not a live EEG closed loop. A real closed loop is still on the roadmap (see below).
-- **Not tested on real EEG hardware.** Every number below comes from public research datasets or a synthetic mock LSL stream. The calibration pipeline is verified to be *plumbed correctly* — marker timestamps line up with recorded EEG exactly as the flash schedule predicts — not verified to *detect a real person's signal*, because no real headset has been connected to it.
-- **Not a solved calibration problem.** The warm-start prior model only overlaps the personal calibration montage on 3 of 5 channels (`Oz`, `Cz`, `Pz` — BNCI2014009 doesn't have `O1`/`O2`), so its usefulness is capped by that overlap. SSVEP "calibration" isn't training at all — CCA/FBCCA are zero-shot by design, so that wizard is a detectability check, not a model-fitting step.
-- **Not benchmarked against a Riemannian/CSP baseline for either paradigm** — xDAWN+LDA and CCA/FBCCA were chosen as the standard, well-published approach for each paradigm respectively, not because they were shown to beat the alternatives here.
-- **Character-level decode exists but hasn't been validated on real signal.** Row/column vote aggregation into an actual letter decision is built (`calibration/character_decode.py`, live in the P300 Setup wizard), but on synthetic data it's exactly as unreliable as it should be — see `docs/BENCHMARKS.md` for two real example runs, including one that decoded correctly by coincidence and one that didn't, with predictions that visibly shift across repetition counts rather than settling on a fixed wrong answer (confirming the aggregation logic responds to input rather than silently defaulting). Whether it works on a real signal is untested.
-- **Not reviewed for clinical or assistive use.** No consent process, no usability testing with an actual target user, no safety review. This is a portfolio-grade systems project, not an assistive device.
+![Research demo](docs/assets/Research_Demo.png)
 
 ## Architecture
 
 ```mermaid
-graph TD
-    subgraph HAL["Hardware Abstraction Layer"]
-        A[LSL Auto-Discovery<br/>resolve_byprop] --> B[Channel Mapper<br/>+ fallback substitution]
-        B --> C[Polyphase Resampler<br/>target sample rate]
-        C --> D[Artifact Rejector<br/>amplitude / ptp / variance]
-    end
-
-    subgraph Offline["Offline Training (public data)"]
-        E[BNCI2014009 / Nakanishi2015<br/>via MOABB] --> F[xDAWN + shrinkage-LDA<br/>P300]
-        E --> G[CCA / FBCCA / CNN<br/>SSVEP]
-    end
-
-    subgraph Calib["Calibration (personal data)"]
-        D --> H[LSL Marker Outlet<br/>Python-driven flash timing]
-        H --> I[Marker-Synced Epoch<br/>Extraction]
-        I --> J[Personal Model]
-        F -.warm-start blend.-> J
-    end
-
-    subgraph App["Streamlit App"]
-        K[Browser Stimulus Component<br/>frame-locked flicker/flash] --> H
-        J --> L[Research Demo /<br/>Your Setup pages]
-    end
-
-    subgraph Output["Offline Replay -> OS Output"]
-        F --> M[pyautogui keypress<br/>injection]
-        M --> N[Wolpaw ITR<br/>calculation]
-    end
-
-    style HAL fill:#12151C,stroke:#1F232D,color:#E9EBF0
-    style Offline fill:#12151C,stroke:#1F232D,color:#E9EBF0
-    style Calib fill:#12151C,stroke:#1F232D,color:#E9EBF0
-    style App fill:#12151C,stroke:#1F232D,color:#E9EBF0
-    style Output fill:#12151C,stroke:#1F232D,color:#E9EBF0
+flowchart LR
+  L[LSL or synthetic source] --> H[Hardware abstraction and channel mapping]
+  H --> A[Resample and reject artifacts]
+  A -->|P300| X[xDAWN + shrinkage LDA]
+  A -->|SSVEP| F[CCA / filter-bank CCA]
+  X --> C[Calibration and evaluation]
+  F --> C
+  C --> U[Streamlit research and setup UI]
+  C --> R[Offline replay demo]
+  R --> K[Optional OS keypress output]
 ```
 
-## Screenshots
+## Quickstart and verification
 
-**Home** — entry point, links to the demo and both calibration wizards
-
-![Home](docs/assets/home.png)
-
-**Research Demo** — real benchmark numbers from public data, plus a live SSVEP preview
-
-![Research Demo](docs/assets/Research_Demo.png)
-
-**P300 Setup — mid-calibration** — live flash matrix, on-screen instructions, progress bar
-
-![P300 calibration in progress](docs/assets/p300-calibration.png)
-
-**P300 Setup — results** — personal model vs. warm-started (blended with public data)
-
-![P300 calibration results](docs/assets/p300-result.png)
-
-**SSVEP Setup — validation** — live per-target countdown and trial progress
-
-![SSVEP validation in progress](docs/assets/ssvep-validation.png)
-
-**SSVEP Setup — results** — per-trial accuracy against the attended frequency
-
-![SSVEP validation results](docs/assets/ssvep-result.png)
-
-## Results
-
-Summary below — full methodology, per-fold breakdowns, and the calibration-pipeline correctness checks are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
-
-| System | Result |
-|---|---|
-| P300 (xDAWN + shrinkage-LDA), `BNCI2014009` subject 1 | 88.4% ± 1.8% accuracy (0.783 balanced accuracy — majority-class baseline is 83.3%), 0.918 ± 0.013 ROC-AUC (5-fold CV) |
-| SSVEP FBCCA, `Nakanishi2015` subject 1 (12-class) | 77.8% zero-shot (vs. CCA 70.4%; supervised CNN stays near chance at every calibration budget tested, up to the dataset's max of 10 examples/class — see `docs/BENCHMARKS.md`) |
-| Offline replay -> online decoder -> OS keypress injection (FBCCA, pre-recorded epochs, not a live headset loop) | 86.67% accuracy, 38.36 bits/min ITR, 15 selections |
-| Calibration marker-EEG sync (mock stream) | 119 epochs extracted, target/non-target counts matched flash schedule exactly |
-
-## Setup
+The Streamlit app reached startup in the prepared Python environment. No physical headset was connected; treat this as an app-startup check, not hardware validation.
 
 ```bash
-git clone <this-repo-url>
-cd bci-speller
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+streamlit run app/Home.py
 ```
 
-**macOS:** LSL needs `liblsl` installed separately, and pylsl needs to find it explicitly:
-
-```bash
-brew install labstreaminglayer/tap/lsl
-export PYLSL_LIB=/opt/homebrew/lib/liblsl.dylib   # add to ~/.zshrc to persist
-```
-
-## Running the system
-
-**No hardware available?** The app can start/stop a synthetic mock stream itself (see the "EEG source" section on either setup page) — no separate terminal needed there. For the CLI scripts below, start it manually:
-
-```bash
-python hardware/playback.py --source synthetic
-```
-
-**CLI / phase-by-phase scripts** (what the pipeline was originally built and verified against):
-
-```bash
-python scripts/train_p300.py
-python scripts/train_ssvep.py
-python scripts/run_closed_loop_demo.py
-python ui/speller_app.py            # pygame speller with live LLM suggestions
-```
-
-**The app** (dashboard + calibration wizard):
-
-```bash
-cd app
-streamlit run Home.py
-```
-
-## Project Structure
-
-```
-bci-speller/
-├── hardware/            # HAL: LSL discovery, channel mapping, resampling, artifact rejection
-├── paradigms/
-│   ├── p300/            # epoching, xDAWN, classifier
-│   └── ssvep/           # CCA, FBCCA, CNN baseline
-├── llm/                 # GPT-2 next-word predictor
-├── ui/                  # pygame speller (P300 matrix + SSVEP flicker + LLM suggestions)
-├── os_hooks/            # pyautogui injection, Wolpaw ITR
-├── scripts/             # CLI entry points, one per pipeline phase
-├── calibration/         # LSL markers, background recorder, marker-synced epoching,
-│                        # P300 calibration session, SSVEP validation session, warm-start blending
-├── app/                 # Streamlit app
-│   ├── Home.py, pages/  # Research Demo, Your Setup (P300), SSVEP Setup
-│   └── components/stimulus/  # browser stimulus component (frame-locked, bidirectional JS<->Python)
-└── docs/                # project narrative, decision log
-```
+On macOS, the project documents a separate `liblsl` install and `PYLSL_LIB` setting for real LSL devices. The synthetic stream is the no-hardware path.
 
 ## Limitations
 
-Structural, not fixable by more time on this laptop alone:
+- All benchmark data are public research data; there is no validated live-headset closed loop.
+- SSVEP supervised CNN remains near chance at the tested calibration budgets; use the documented FBCCA result instead.
+- Personal calibration and warm-start behavior need independent evaluation with actual users and hardware.
+- Predictive text / OS keypress output is a demo feature, not evidence of usable assistive performance.
 
-- **No real headset has touched this code.** Everything is verified against public datasets or synthetic noise. Real validation requires an actual person, an actual headset, and an actual attempt to type something.
-- **Warm-start channel overlap is thin.** The public P300 prior model only shares 3 of 5 HAL channels with the personal calibration montage. Its usefulness scales with that overlap, not with how much public data it was trained on.
-- **SSVEP calibration validates, it doesn't train.** There's no equivalent of "personal SSVEP model" the way there is for P300, because CCA/FBCCA don't use training data in the first place.
-- **Single-subject numbers throughout.** Every accuracy/AUC figure above is one subject on one public dataset — none of this has been checked for how much it varies across subjects (see roadmap).
-- **No safety, consent, or usability review.** Appropriate for a portfolio project. Not appropriate grounds to use this with a real person who has no other way to communicate — that requires clinical oversight this project doesn't have.
+## Next steps
 
-## Engineering Roadmap
-
-1. **Real hardware validation.** The only way to know if any of the calibration machinery here actually detects a real person's signal. Everything else is downstream of this.
-2. **Validate character-level decode on real signal.** The row/column vote aggregation itself is built and behaves correctly (see `docs/BENCHMARKS.md`), but has only been exercised on synthetic noise, where it should — and does — perform unreliably. Whether it actually stabilizes into correct decodes given real EEG signal is untested.
-3. **A genuine real-time closed loop.** Replace the offline-replay demo with a live LSL headset feeding a causal, sample-by-sample decoder (this also means replacing `filtfilt` in `fbcca.py` with a causal filter — see `ARCHITECTURE.md`).
-4. **Cross-subject / leave-one-subject-out evaluation** for both paradigms, to quantify how much the reported single-subject numbers would move on a different person — directly relevant to how much the warm-start prior model can be trusted for someone who isn't in the training set.
-5. **Adaptive calibration stopping.** Currently fixed repetition counts; tracking live cross-validated accuracy during a session and stopping early where confidence is already high (or extending where it isn't) would cut real calibration time, which is the actual adoption bottleneck for BCI in general.
-6. **Riemannian/CSP baseline for P300**, to know whether xDAWN+LDA's numbers reflect a genuine advantage or are simply what any reasonable spatial-filtering approach gets on this dataset.
-7. **Automated test suite.** The verification scripts under `scripts/verify_*.py` are manual, one-off checks; converting the numerical ones (channel mapping, resampling ratio, artifact thresholds, ITR formula) into a real `tests/` suite would catch regressions instead of relying on rereading terminal output.
-
-## Citations
-
-- **P300 dataset**: Aricò, P., Aloise, F., Schettini, F., Salinari, S., Mattia, D., & Cincotti, F. (2014). Influence of P300 latency jitter on event related potential-based brain-computer interface performance. *Journal of Neural Engineering*, 11(3).
-- **SSVEP dataset**: Nakanishi, M., Wang, Y., Wang, Y.-T., & Jung, T.-P. (2015). A comparison study of canonical correlation analysis based methods for detecting steady-state visual evoked potentials. *PLoS ONE*, 10(10), e0140703.
-- **xDAWN**: Rivet, B., Souloumiac, A., Attina, V., & Gibert, G. (2009). xDAWN algorithm to enhance evoked potentials: application to brain-computer interface. *IEEE Transactions on Biomedical Engineering*, 56(8), 2035–2043.
-- **FBCCA**: Chen, X., Wang, Y., Gao, S., Jung, T.-P., & Gao, X. (2015). Filter bank canonical correlation analysis for implementing a high-speed SSVEP-based brain-computer interface. *Journal of Neural Engineering*, 12(4), 046008.
-- **Benchmarking framework**: Jayaram, V., & Barachant, A. (2018). MOABB: trustworthy algorithm benchmarking for BCIs. *Journal of Neural Engineering*, 15(6), 066011.
-
-## License
-
-MIT License — see `LICENSE` for details.
+1. Add a reproducible clean-install test and a no-hardware demo check.
+2. Validate timing, artifacts, and decoding on a supported physical headset.
+3. Measure end-to-end decision latency and user-level spelling rate.
+4. Add safety controls, explicit consent, and a non-keypress output mode.
